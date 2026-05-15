@@ -266,6 +266,7 @@
 
         // Three.js Core Variables
         let scene, camera, renderer, clock;
+        let hemiLight, pointLight;
 
         // Game Objects
         let player;
@@ -457,10 +458,10 @@
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
 
-            const hemiLight = new THREE.HemisphereLight(0x00ffff, 0xff00ff, 0.5);
+            hemiLight = new THREE.HemisphereLight(0x00ffff, 0xff00ff, 0.5);
             scene.add(hemiLight);
 
-            const pointLight = new THREE.PointLight(0x00ffff, 1, 50);
+            pointLight = new THREE.PointLight(0x00ffff, 1, 50);
             pointLight.position.set(0, 5, 0);
             scene.add(pointLight);
 
@@ -860,6 +861,16 @@
 
             // Gradually increase speed
             STATE.speed = Math.min(CONFIG.maxSpeed, CONFIG.baseSpeed + (STATE.distance * CONFIG.speedMultiplier));
+
+            // Dynamic Scene Color based on speed (danger level)
+            const dangerLevel = Math.max(0, Math.min(1, (STATE.speed - CONFIG.baseSpeed) / (CONFIG.maxSpeed - CONFIG.baseSpeed)));
+            
+            scene.background.lerpColors(new THREE.Color(0x050510), new THREE.Color(0x220505), dangerLevel);
+            scene.fog.color.copy(scene.background);
+            
+            hemiLight.color.lerpColors(new THREE.Color(0x00ffff), new THREE.Color(0xff0000), dangerLevel);
+            pointLight.color.copy(hemiLight.color);
+            hemiLight.groundColor.lerpColors(new THREE.Color(0xff00ff), new THREE.Color(0xffaa00), dangerLevel);
 
             // Move Grid to simulate forward motion (modulo trick for infinite loop)
             const gridSpacing = 5; // 200 size / 40 segments = 5
