@@ -326,24 +326,24 @@
                     while (nextNoteTime < ctx.currentTime + scheduleAheadTime) {
                         const freq = bassNotes[currentNote % bassNotes.length];
                         
-                        // Create oscillators for a fat synth sound
+                        // Create oscillators for a softer synth sound
                         const osc1 = ctx.createOscillator();
-                        osc1.type = 'sawtooth';
+                        osc1.type = 'triangle';
                         const osc2 = ctx.createOscillator();
-                        osc2.type = 'square';
+                        osc2.type = 'sine';
                         // Detune second oscillator slightly
-                        osc2.detune.value = 10; 
+                        osc2.detune.value = 5; 
                         
                         const filter = ctx.createBiquadFilter();
                         filter.type = 'lowpass';
-                        // Plucky filter envelope
-                        filter.frequency.setValueAtTime(200, nextNoteTime);
-                        filter.frequency.exponentialRampToValueAtTime(1500, nextNoteTime + 0.05);
-                        filter.frequency.exponentialRampToValueAtTime(200, nextNoteTime + 0.2);
+                        // Plucky filter envelope (softer)
+                        filter.frequency.setValueAtTime(100, nextNoteTime);
+                        filter.frequency.exponentialRampToValueAtTime(600, nextNoteTime + 0.05);
+                        filter.frequency.exponentialRampToValueAtTime(100, nextNoteTime + 0.2);
                         
                         const gain = ctx.createGain();
                         gain.gain.setValueAtTime(0.01, nextNoteTime);
-                        gain.gain.linearRampToValueAtTime(0.15, nextNoteTime + 0.02);
+                        gain.gain.linearRampToValueAtTime(0.08, nextNoteTime + 0.02);
                         gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 0.2);
                         
                         osc1.connect(filter);
