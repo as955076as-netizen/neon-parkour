@@ -172,6 +172,7 @@
     <div id="hud" style="display: none;">
         <div class="hud-stat" id="score-display">距離: 0 m</div>
         <div class="hud-stat" id="speed-display">速度: 0 km/h</div>
+        <div class="hud-stat" id="coin-display" style="color: #ffd700;">金幣: 0</div>
         <div class="hud-stat" id="high-score-display" style="color: #ffaa00;">最高: 0 m</div>
     </div>
 
@@ -197,6 +198,7 @@
         <div id="game-over-screen">
             <h1>系統崩潰</h1>
             <div class="final-score" id="final-distance">最終距離: 0 m</div>
+            <div class="final-score" id="final-coins" style="color: #ffd700; font-size: 1.5rem; margin-top: -15px;">獲得金幣: 0</div>
             <div id="new-record-msg" style="color: #ffaa00; font-size: 1.5rem; font-weight: bold; margin-bottom: 20px; display: none; text-shadow: 0 0 10px #ffaa00;">🏆 新最高紀錄！</div>
             <button class="btn" id="restart-btn">重新開始</button>
         </div>
@@ -239,6 +241,7 @@
             speed: CONFIG.baseSpeed,
             distance: 0,
             highScore: 0,
+            coins: 0,
             lane: 0, // -1 (left), 0 (center), 1 (right)
             isJumping: false,
             isDucking: false,
@@ -255,7 +258,9 @@
         const topPauseBtn = document.getElementById('top-pause-btn');
         const scoreDisplay = document.getElementById('score-display');
         const speedDisplay = document.getElementById('speed-display');
+        const coinDisplay = document.getElementById('coin-display');
         const finalDistanceDisplay = document.getElementById('final-distance');
+        const finalCoinsDisplay = document.getElementById('final-coins');
         const highScoreDisplay = document.getElementById('high-score-display');
         const newRecordMsg = document.getElementById('new-record-msg');
 
@@ -266,6 +271,7 @@
         let player;
         let playerBox = new THREE.Box3();
         let obstacles = [];
+        let activeCoins = [];
         let gridHelper;
         let starGeo, starSystem;
 
@@ -274,7 +280,8 @@
             player: new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x0088ff, emissiveIntensity: 0.8, roughness: 0.2 }),
             block: new THREE.MeshStandardMaterial({ color: 0xff0055, emissive: 0xaa0022, emissiveIntensity: 0.8 }),
             low: new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0x888800, emissiveIntensity: 0.8 }),
-            high: new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0x880088, emissiveIntensity: 0.8 })
+            high: new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0x880088, emissiveIntensity: 0.8 }),
+            coin: new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800, emissiveIntensity: 1, metalness: 0.8, roughness: 0.2 })
         };
 
         // Geometries
@@ -282,7 +289,8 @@
             player: new THREE.BoxGeometry(1.5, 1.5, 1.5),
             block: new THREE.BoxGeometry(3.6, 2, 2),  // Full block
             low: new THREE.BoxGeometry(3.6, 1, 1.5),  // Low obstacle (jump)
-            high: new THREE.BoxGeometry(3.6, 0.5, 1.5) // High obstacle (duck)
+            high: new THREE.BoxGeometry(3.6, 0.5, 1.5), // High obstacle (duck)
+            coin: new THREE.TorusGeometry(0.6, 0.15, 8, 16) // Coin shape
         };
 
         // Spawning Logic
@@ -380,6 +388,26 @@
                 if (this.schedulerTimer) {
                     clearInterval(this.schedulerTimer);
                 }
+            },
+
+            playCoin() {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                osc.type = 'sine';
+                
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(1200, this.ctx.currentTime + 0.05); // Ping
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
             },
 
             playCrash() {
@@ -501,9 +529,16 @@
             player.scale.set(1, 1, 1);
             playerBox.setFromObject(player);
 
-            // Clear Obstacles
+            // Reset Coins
+            STATE.coins = 0;
+            coinDisplay.innerText = `金幣: 0`;
+            
+            // Clear Obstacles and Coins
             obstacles.forEach(obs => scene.remove(obs.mesh));
             obstacles = [];
+            activeCoins.forEach(c => scene.remove(c.mesh));
+            activeCoins = [];
+            
             distanceSinceLastSpawn = 0;
             currentSpawnInterval = 50;
 
@@ -547,6 +582,7 @@
             hud.style.display = 'none';
             topPauseBtn.style.display = 'none';
             finalDistanceDisplay.innerText = `最終距離: ${currentScore} m`;
+            finalCoinsDisplay.innerText = `獲得金幣: ${STATE.coins}`;
         }
 
         function togglePause() {
@@ -690,6 +726,25 @@
 
                 createObstacle(lane, type);
             }
+            
+            // Spawn Coin in remaining empty lane occasionally (40% chance)
+            if (numObstacles < 3 && Math.random() < 0.4) {
+                const emptyLane = availableLanes[numObstacles]; // The next lane in shuffled array
+                createCoin(emptyLane);
+            }
+        }
+
+        function createCoin(lane) {
+            let mesh = new THREE.Mesh(geometries.coin, materials.coin);
+            mesh.position.set(lane * CONFIG.laneWidth, 1, CONFIG.spawnZDistance);
+            // Rotate so it stands upright
+            mesh.rotation.y = Math.PI / 2;
+            scene.add(mesh);
+
+            let box = new THREE.Box3().setFromObject(mesh);
+            box.expandByScalar(0.5); // Generous hitbox for coins
+            
+            activeCoins.push({ mesh, box });
         }
 
         function createObstacle(lane, type) {
@@ -847,6 +902,20 @@
                 }
             }
 
+            // Update Coins
+            for (let i = activeCoins.length - 1; i >= 0; i--) {
+                let c = activeCoins[i];
+                c.mesh.position.z += moveAmount;
+                c.mesh.rotation.y += 5 * delta; // Spin coin
+                c.box.setFromObject(c.mesh);
+                c.box.expandByScalar(0.5);
+
+                if (c.mesh.position.z > CONFIG.despawnZDistance) {
+                    scene.remove(c.mesh);
+                    activeCoins.splice(i, 1);
+                }
+            }
+
             // Spawn new obstacles
             // Interval decreases as speed increases
             currentSpawnInterval = Math.max(25, 60 - (STATE.speed * 0.3));
@@ -858,12 +927,29 @@
         }
 
         function checkCollisions() {
+            // Check Obstacles
             for (let obs of obstacles) {
-                // Only check collision if obstacle is relatively close to player Z
                 if (Math.abs(obs.mesh.position.z - player.position.z) < 5) {
                     if (playerBox.intersectsBox(obs.box)) {
                         gameOver();
                         return;
+                    }
+                }
+            }
+
+            // Check Coins
+            for (let i = activeCoins.length - 1; i >= 0; i--) {
+                let c = activeCoins[i];
+                if (Math.abs(c.mesh.position.z - player.position.z) < 5) {
+                    if (playerBox.intersectsBox(c.box)) {
+                        // Collect Coin
+                        AudioController.playCoin();
+                        STATE.coins += 1;
+                        coinDisplay.innerText = `金幣: ${STATE.coins}`;
+                        
+                        // Particle/visual effect (simple: just remove for now, could add burst later)
+                        scene.remove(c.mesh);
+                        activeCoins.splice(i, 1);
                     }
                 }
             }
