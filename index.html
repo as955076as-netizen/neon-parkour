@@ -305,41 +305,74 @@
                 if (this.isPlaying) return;
                 this.isPlaying = true;
                 
-                // Synth Bassline
-                this.bgmOsc = this.ctx.createOscillator();
-                this.bgmOsc.type = 'sawtooth';
+                const ctx = this.ctx;
+                const tempo = 140; // BPM
+                const lookahead = 25.0; // ms
+                const scheduleAheadTime = 0.1; // s
+                let currentNote = 0;
+                let nextNoteTime = ctx.currentTime + 0.1;
                 
-                this.bgmGain = this.ctx.createGain();
-                this.bgmGain.gain.value = 0.1;
+                // Synthwave sequence (C minor pentatonic arpeggio)
+                const bassNotes = [
+                    65.41, 65.41, 130.81, 65.41, // C2, C2, C3, C2
+                    77.78, 77.78, 155.56, 77.78, // Eb2, Eb2, Eb3, Eb2
+                    98.00, 98.00, 196.00, 98.00, // G2, G2, G3, G2
+                    58.27, 58.27, 116.54, 58.27  // Bb1, Bb1, Bb2, Bb1
+                ];
                 
-                this.bgmOsc.connect(this.bgmGain);
-                this.bgmGain.connect(this.ctx.destination);
-                
-                // Wobble effect
-                this.lfo = this.ctx.createOscillator();
-                this.lfo.type = 'sine';
-                this.lfo.frequency.value = 8;
-                const lfoGain = this.ctx.createGain();
-                lfoGain.gain.value = 0.05;
-                this.lfo.connect(lfoGain);
-                lfoGain.connect(this.bgmGain.gain);
-                
-                this.bgmOsc.frequency.setValueAtTime(55, this.ctx.currentTime); // Low A
-                
-                this.bgmOsc.start();
-                this.lfo.start();
+                this.schedulerTimer = setInterval(() => {
+                    if (!this.isPlaying) return;
+                    
+                    while (nextNoteTime < ctx.currentTime + scheduleAheadTime) {
+                        const freq = bassNotes[currentNote % bassNotes.length];
+                        
+                        // Create oscillators for a fat synth sound
+                        const osc1 = ctx.createOscillator();
+                        osc1.type = 'sawtooth';
+                        const osc2 = ctx.createOscillator();
+                        osc2.type = 'square';
+                        // Detune second oscillator slightly
+                        osc2.detune.value = 10; 
+                        
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        // Plucky filter envelope
+                        filter.frequency.setValueAtTime(200, nextNoteTime);
+                        filter.frequency.exponentialRampToValueAtTime(1500, nextNoteTime + 0.05);
+                        filter.frequency.exponentialRampToValueAtTime(200, nextNoteTime + 0.2);
+                        
+                        const gain = ctx.createGain();
+                        gain.gain.setValueAtTime(0.01, nextNoteTime);
+                        gain.gain.linearRampToValueAtTime(0.15, nextNoteTime + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 0.2);
+                        
+                        osc1.connect(filter);
+                        osc2.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(ctx.destination);
+                        
+                        osc1.frequency.value = freq;
+                        // Mix the square wave an octave lower for bass
+                        osc2.frequency.value = freq / 2;
+                        
+                        osc1.start(nextNoteTime);
+                        osc2.start(nextNoteTime);
+                        osc1.stop(nextNoteTime + 0.2);
+                        osc2.stop(nextNoteTime + 0.2);
+                        
+                        // Advance note (16th notes)
+                        const secondsPerBeat = 60.0 / tempo;
+                        nextNoteTime += 0.25 * secondsPerBeat;
+                        currentNote++;
+                    }
+                }, lookahead);
             },
 
             stopBGM() {
                 if (!this.isPlaying) return;
                 this.isPlaying = false;
-                if (this.bgmOsc) {
-                    this.bgmOsc.stop();
-                    this.bgmOsc.disconnect();
-                }
-                if (this.lfo) {
-                    this.lfo.stop();
-                    this.lfo.disconnect();
+                if (this.schedulerTimer) {
+                    clearInterval(this.schedulerTimer);
                 }
             },
 
