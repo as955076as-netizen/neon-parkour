@@ -283,6 +283,88 @@
         let distanceSinceLastSpawn = 0;
         let currentSpawnInterval = 40; // Initial distance between obstacle rows
 
+        // --- Audio System (Web Audio API) ---
+        const AudioController = {
+            ctx: null,
+            bgmOsc: null,
+            bgmGain: null,
+            lfo: null,
+            isPlaying: false,
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+
+            playBGM() {
+                this.init();
+                if (this.isPlaying) return;
+                this.isPlaying = true;
+                
+                // Synth Bassline
+                this.bgmOsc = this.ctx.createOscillator();
+                this.bgmOsc.type = 'sawtooth';
+                
+                this.bgmGain = this.ctx.createGain();
+                this.bgmGain.gain.value = 0.1;
+                
+                this.bgmOsc.connect(this.bgmGain);
+                this.bgmGain.connect(this.ctx.destination);
+                
+                // Wobble effect
+                this.lfo = this.ctx.createOscillator();
+                this.lfo.type = 'sine';
+                this.lfo.frequency.value = 8;
+                const lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 0.05;
+                this.lfo.connect(lfoGain);
+                lfoGain.connect(this.bgmGain.gain);
+                
+                this.bgmOsc.frequency.setValueAtTime(55, this.ctx.currentTime); // Low A
+                
+                this.bgmOsc.start();
+                this.lfo.start();
+            },
+
+            stopBGM() {
+                if (!this.isPlaying) return;
+                this.isPlaying = false;
+                if (this.bgmOsc) {
+                    this.bgmOsc.stop();
+                    this.bgmOsc.disconnect();
+                }
+                if (this.lfo) {
+                    this.lfo.stop();
+                    this.lfo.disconnect();
+                }
+            },
+
+            playCrash() {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                osc.type = 'square';
+                
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+                
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 0.5);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.5);
+                
+                this.stopBGM();
+            }
+        };
+
         // Initialize Game
         function init() {
             // Setup Scene
@@ -370,11 +452,17 @@
             hud.style.display = 'block';
             topPauseBtn.style.display = 'block';
 
+            // Start Audio
+            AudioController.playBGM();
+
             clock.start();
         }
 
         function gameOver() {
             STATE.isPlaying = false;
+
+            // Play Crash Sound
+            AudioController.playCrash();
 
             // Visual feedback (flash red)
             scene.background.setHex(0x550000);
