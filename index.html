@@ -172,6 +172,7 @@
     <div id="hud" style="display: none;">
         <div class="hud-stat" id="score-display">距離: 0 m</div>
         <div class="hud-stat" id="speed-display">速度: 0 km/h</div>
+        <div class="hud-stat" id="high-score-display" style="color: #ffaa00;">最高: 0 m</div>
     </div>
 
     <!-- Top Right Pause Button -->
@@ -196,6 +197,7 @@
         <div id="game-over-screen">
             <h1>系統崩潰</h1>
             <div class="final-score" id="final-distance">最終距離: 0 m</div>
+            <div id="new-record-msg" style="color: #ffaa00; font-size: 1.5rem; font-weight: bold; margin-bottom: 20px; display: none; text-shadow: 0 0 10px #ffaa00;">🏆 新最高紀錄！</div>
             <button class="btn" id="restart-btn">重新開始</button>
         </div>
 
@@ -236,6 +238,7 @@
             isPaused: false,
             speed: CONFIG.baseSpeed,
             distance: 0,
+            highScore: 0,
             lane: 0, // -1 (left), 0 (center), 1 (right)
             isJumping: false,
             isDucking: false,
@@ -253,6 +256,8 @@
         const scoreDisplay = document.getElementById('score-display');
         const speedDisplay = document.getElementById('speed-display');
         const finalDistanceDisplay = document.getElementById('final-distance');
+        const highScoreDisplay = document.getElementById('high-score-display');
+        const newRecordMsg = document.getElementById('new-record-msg');
 
         // Three.js Core Variables
         let scene, camera, renderer, clock;
@@ -442,6 +447,10 @@
             player.position.set(0, 0.75, 0);
             scene.add(player);
 
+            // Load High Score
+            STATE.highScore = parseInt(localStorage.getItem('neonRunnerHighScore')) || 0;
+            highScoreDisplay.innerText = `最高: ${STATE.highScore} m`;
+
             // Event Listeners
             window.addEventListener('resize', onWindowResize, false);
             document.addEventListener('keydown', handleKeyDown, false);
@@ -482,6 +491,7 @@
             uiLayer.style.display = 'none';
             startScreen.style.display = 'none';
             gameOverScreen.style.display = 'none';
+            newRecordMsg.style.display = 'none'; // Hide new record message
             hud.style.display = 'block';
             topPauseBtn.style.display = 'block';
 
@@ -501,13 +511,22 @@
             scene.background.setHex(0x550000);
             setTimeout(() => { scene.background.setHex(CONFIG.fogColor); }, 100);
 
+            // Update High Score
+            let currentScore = Math.floor(STATE.distance);
+            if (currentScore > STATE.highScore) {
+                STATE.highScore = currentScore;
+                localStorage.setItem('neonRunnerHighScore', STATE.highScore);
+                highScoreDisplay.innerText = `最高: ${STATE.highScore} m`;
+                newRecordMsg.style.display = 'block';
+            }
+
             // Update UI
             uiLayer.style.display = 'flex';
             gameOverScreen.style.display = 'block';
             pauseScreen.style.display = 'none';
             hud.style.display = 'none';
             topPauseBtn.style.display = 'none';
-            finalDistanceDisplay.innerText = `最終距離: ${Math.floor(STATE.distance)} m`;
+            finalDistanceDisplay.innerText = `最終距離: ${currentScore} m`;
         }
 
         function togglePause() {
