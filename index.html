@@ -267,6 +267,7 @@
         let playerBox = new THREE.Box3();
         let obstacles = [];
         let gridHelper;
+        let starGeo, starSystem;
 
         // Materials (Cached for performance)
         const materials = {
@@ -441,6 +442,25 @@
             // Extend grid far back
             gridHelper.position.z = -50;
             scene.add(gridHelper);
+
+            // Create Starfield (Speed effect)
+            starGeo = new THREE.BufferGeometry();
+            const starCount = 1000;
+            const starPositions = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount; i++) {
+                starPositions[i * 3] = (Math.random() - 0.5) * 200; // x: -100 to 100
+                starPositions[i * 3 + 1] = Math.random() * 50;      // y: 0 to 50
+                starPositions[i * 3 + 2] = (Math.random() - 0.5) * 300; // z: -150 to 150
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+            let starMat = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.5,
+                transparent: true,
+                opacity: 0.8
+            });
+            starSystem = new THREE.Points(starGeo, starMat);
+            scene.add(starSystem);
 
             // Create Player
             player = new THREE.Mesh(geometries.player, materials.player);
@@ -719,6 +739,15 @@
                 // Background animation when dead/menu
                 gridHelper.position.z += 5 * delta;
                 if (gridHelper.position.z > 5) gridHelper.position.z -= 5;
+                
+                // Idle star movement
+                const positions = starGeo.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 2] += 10 * delta;
+                    if (positions[i + 2] > 50) positions[i + 2] -= 300;
+                }
+                starGeo.attributes.position.needsUpdate = true;
+                
                 player.rotation.y += delta * 0.5;
             }
 
@@ -783,6 +812,21 @@
             if (gridHelper.position.z > 0) {
                 gridHelper.position.z -= gridSpacing;
             }
+
+            // Move Stars for speed effect (moves faster than ground for parallax)
+            const positions = starGeo.attributes.position.array;
+            const starMoveAmount = moveAmount * 1.5; // Parallax effect
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i + 2] += starMoveAmount;
+                // Reset star to back if it passes camera
+                if (positions[i + 2] > 20) {
+                    positions[i + 2] -= 300;
+                    // Randomize x/y on respawn to make it feel infinite
+                    positions[i] = (Math.random() - 0.5) * 200;
+                    positions[i + 1] = Math.random() * 50;
+                }
+            }
+            starGeo.attributes.position.needsUpdate = true;
 
             // Update Obstacles
             for (let i = obstacles.length - 1; i >= 0; i--) {
